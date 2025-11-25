@@ -5,7 +5,7 @@ from .models import CustomUser
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password], style={'input_type': 'password'})
-    confirm_password = serializers.CharField(write_only=True, required=True, label="Confirm Password", style={'input_type': 'password'})
+    confirm_password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
 
     class Meta:
         model = CustomUser
@@ -42,7 +42,7 @@ class LoginSerializer(serializers.Serializer):
             user = authenticate(request=self.context.get('request'), username=email, password=password)
             if not user:
                 raise serializers.ValidationError('Invalid email or password.')
-            if not user.is_verified:
+            if not user.is_active:
                 raise serializers.ValidationError('Please verify your email address before logging in.')
             if not user.is_active:
                 raise serializers.ValidationError('User account is disabled.')
@@ -55,11 +55,11 @@ class LoginSerializer(serializers.Serializer):
 class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ['id', 'name', 'email', 'is_active', 'is_verified', 'date_joined']
+        fields = ['id', 'name', 'email', 'is_active', 'date_joined']
 
 class EmailVerificationSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
-    otp_code = serializers.CharField(required=True, max_length=6, min_length=6)
+    otp_code = serializers.CharField(required=True, max_length=4, min_length=4)
 
     def validate_otp_code(self, value):
         if not value.isdigit():
@@ -72,7 +72,7 @@ class ResendVerificationEmailSerializer(serializers.Serializer):
     def validate_email(self, value):
         try:
             user = CustomUser.objects.get(email=value)
-            if user.is_verified:
+            if user.is_active:
                 raise serializers.ValidationError("This email is already verified.")
         except CustomUser.DoesNotExist:
             raise serializers.ValidationError("No user found with this email address.")
@@ -86,20 +86,11 @@ class ForgotPasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError("No user found with this email address.")
         return value
 
-class VerifyResetOTPSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=True)
-    otp_code = serializers.CharField(required=True, max_length=6, min_length=6)
-
-    def validate_otp_code(self, value):
-        if not value.isdigit():
-            raise serializers.ValidationError("OTP code must contain only digits.")
-        return value
-
 class ResetPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
-    otp_code = serializers.CharField(required=True, max_length=6, min_length=6)
+    otp_code = serializers.CharField(required=True, max_length=4, min_length=4)
     new_password = serializers.CharField(write_only=True, required=True, validators=[validate_password], style={'input_type': 'password'})
-    new_password2 = serializers.CharField(write_only=True, required=True, label="Confirm Password", style={'input_type': 'password'})
+    confirm_password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
 
     def validate_otp_code(self, value):
         if not value.isdigit():
@@ -107,6 +98,6 @@ class ResetPasswordSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs):
-        if attrs['new_password'] != attrs['new_password2']:
+        if attrs['new_password'] != attrs['confirm_password']:
             raise serializers.ValidationError({"new_password": "Password fields didn't match."})
         return attrs

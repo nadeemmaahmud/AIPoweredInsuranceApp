@@ -8,8 +8,7 @@ from django.conf import settings
 from .models import CustomUser, EmailVerificationOTP, PasswordResetOTP
 from .serializers import (
     RegisterSerializer, LoginSerializer, CustomUserSerializer, EmailVerificationSerializer,
-    ResendVerificationEmailSerializer,ForgotPasswordSerializer, VerifyResetOTPSerializer,
-    ResetPasswordSerializer
+    ResendVerificationEmailSerializer,ForgotPasswordSerializer, ResetPasswordSerializer
 )
 
 class RegisterView(APIView):
@@ -78,19 +77,6 @@ class LoginView(APIView):
             }, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request):
-        try:
-            refresh_token = request.data.get('refresh_token')
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
-            return Response({'message': 'Logout successful'}, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
-
 class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -110,43 +96,37 @@ class VerifyEmailView(APIView):
             try:
                 user = CustomUser.objects.get(email=email)
                 
-                if user.is_verified:
+                if user.is_active:
                     return Response({
                         'message': 'Email is already verified. You can login now.'
                     }, status=status.HTTP_200_OK)
                 
-                verification_token = EmailVerificationOTP.objects.filter(
+                verification_otp = EmailVerificationOTP.objects.filter(
                     user=user,
                     otp_code=otp_code,
                     is_used=False
                 ).order_by('-created_at').first()
                 
-                if not verification_token:
+                if not verification_otp:
                     return Response({
                         'error': 'Invalid verification code.'
                     }, status=status.HTTP_400_BAD_REQUEST)
                 
-                if not verification_token.is_valid():
+                if not verification_otp.is_valid():
                     return Response({
                         'error': 'Verification code has expired. Please request a new one.'
                     }, status=status.HTTP_400_BAD_REQUEST)
                 
-                user.is_verified = True
                 user.is_active = True
                 user.save()
                 
-                verification_token.is_used = True
-                verification_token.save()
+                verification_otp.is_used = True
+                verification_otp.save()
                 
                 refresh = RefreshToken.for_user(user)
                 
                 return Response({
                     'message': 'Email verified successfully! You can now login.',
-                    'user': CustomUserSerializer(user).data,
-                    'tokens': {
-                        'refresh': str(refresh),
-                        'access': str(refresh.access_token),
-                    }
                 }, status=status.HTTP_200_OK)
                 
             except CustomUser.DoesNotExist:
@@ -216,7 +196,7 @@ class ForgotPasswordView(APIView):
             reset_otp = PasswordResetOTP.objects.create(user=user)
             email_subject = 'Password Reset Request - SellnService'
             email_message = f"""
-                Hello {user.first_name},
+                Hello {user.name},
 
                 You requested to reset your password.
 
@@ -249,45 +229,6 @@ class ForgotPasswordView(APIView):
             return Response({
                 'message': 'Password reset code sent to your email.'
             }, status=status.HTTP_200_OK)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-class VerifyResetOTPView(APIView):
-    permission_classes = [AllowAny]
-    
-    def post(self, request):
-        serializer = VerifyResetOTPSerializer(data=request.data)
-        if serializer.is_valid():
-            email = serializer.validated_data['email']
-            otp_code = serializer.validated_data['otp_code']
-            
-            try:
-                user = CustomUser.objects.get(email=email)
-                reset_otp = PasswordResetOTP.objects.filter(
-                    user=user,
-                    otp_code=otp_code,
-                    is_used=False
-                ).order_by('-created_at').first()
-                
-                if not reset_otp:
-                    return Response({
-                        'error': 'Invalid reset code.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                
-                if not reset_otp.is_valid():
-                    return Response({
-                        'error': 'Reset code has expired. Please request a new one.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                
-                return Response({
-                    'message': 'OTP verified successfully. You can now reset your password.',
-                    'email': email
-                }, status=status.HTTP_200_OK)
-                
-            except CustomUser.DoesNotExist:
-                return Response({
-                    'error': 'No user found with this email address.'
-                }, status=status.HTTP_400_BAD_REQUEST)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

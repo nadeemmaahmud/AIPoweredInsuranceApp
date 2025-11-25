@@ -18,6 +18,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     name = models.CharField(max_length=100)
     email = models.EmailField(unique=True)
     is_active = models.BooleanField(default=False)
+    is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(auto_now_add=True)
 
     objects = CustomUserManager()
@@ -32,29 +33,6 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
-
-class UserVerificationOTP(models.Model):
-    email = models.EmailField()
-    otp_code = models.CharField(max_length=4, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField(blank=True, null=True)
-
-    def save(self, *args, **kwargs):
-        if not self.otp_code:
-            self.otp_code = ''.join(random.choices(string.digits, k=4))
-        
-        if not self.expires_at:
-            self.expires_at = timezone.now() + timezone.timedelta(minutes=5)
-        
-        super().save(*args, **kwargs)
-
-    @property
-    def is_expired(self):
-        return timezone.now() > self.expires_at
-
-    def __str__(self):
-        return f"OTP for {self.email} - {self.otp_code}"
-
 
 class EmailVerificationOTP(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='verification_tokens')

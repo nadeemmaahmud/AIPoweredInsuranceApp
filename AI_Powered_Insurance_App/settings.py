@@ -36,6 +36,7 @@ ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS').split(',')
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -43,6 +44,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'users',
+    'channels',
+    'generalchat',
+    'premiumchat',
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
@@ -75,6 +79,7 @@ TEMPLATES = [
     },
 ]
 
+ASGI_APPLICATION = 'AI_Powered_Insurance_App.asgi.application'
 WSGI_APPLICATION = 'AI_Powered_Insurance_App.wsgi.application'
 
 
@@ -153,5 +158,7 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
 
 AUTH_USER_MODEL = 'users.CustomUser'
