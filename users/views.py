@@ -1,132 +1,64 @@
-from rest_framework import status
+from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
 from django.conf import settings
-from django.contrib.auth.hashers import make_password
-from .models import (
-    CustomUser,
-    PendingRegistration,
-    PendingVerificationOTP,
-    PasswordResetOTP,
-)
+from .models import CustomUser, EmailVerificationOTP, PasswordResetOTP
 from .serializers import (
-    RegisterSerializer, LoginSerializer,
-    OtpVerificationSerializer, ResendOtpVerificationSerializer,
-    ForgotPasswordSerializer, ResetPasswordSerializer, VerifyResetOTPSerializer,
-    CustomUserSerializer,
+    RegisterSerializer, LoginSerializer, CustomUserSerializer, EmailVerificationSerializer,
+    ResendVerificationEmailSerializer,ForgotPasswordSerializer, VerifyResetOTPSerializer,
+    ResetPasswordSerializer
 )
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
-
+    
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
-
         if serializer.is_valid():
-            data = serializer.validated_data
-            email = data['email']
-            name = data.get('name') or data.get('first_name') or ''
-            raw_password = data['password']
-
-            # remove any previous pending registrations for this email
-            PendingRegistration.objects.filter(email=email).delete()
-
-            # store hashed password (never store raw password)
-            pending = PendingRegistration.objects.create(
-                email=email,
-                name=name,
-                password_hashed=make_password(raw_password),
-            )
-
-            otp = PendingVerificationOTP.objects.create(pending=pending)
-
+            user = serializer.save()
+            verification_otp = EmailVerificationOTP.objects.create(user=user)
             email_subject = 'Verify Your Email - SellnService'
             email_message = f"""
-Hello {name},
+                Hello {user.name},
 
-Thank you for registering with SellnService!
+                Thank you for registering with SellnService!
 
-Your email verification code is:
+                Your email verification code is:
 
-{otp.otp_code}
+                {verification_otp.otp_code}
 
-This code will expire in 15 minutes.
+                This code will expire in 15 minutes.
 
-If you didn't create an account, please ignore this email.
+                If you didn't create an account, please ignore this email.
 
-Best regards,
-SellnService Team
+                Best regards,
+                SellnService Team
             """
-
+            
             try:
                 send_mail(
                     email_subject,
                     email_message,
                     settings.DEFAULT_FROM_EMAIL,
-                    [email],
+                    [user.email],
                     fail_silently=False,
                 )
             except Exception as e:
-                PendingVerificationOTP.objects.filter(pending=pending).delete()
-                pending.delete()
+                EmailVerificationOTP.objects.filter(user=user).delete()
+                user.delete()
                 return Response({
-                    'error': 'Failed to send verification email.',
+                    'error': 'Failed to send verification email. Please try again later.',
                     'details': str(e)
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+            
             return Response({
-                'message': 'Registration recorded. Verify the OTP sent to your email to complete account creation.'
+                'message': 'User registered successfully. Please check your email for the verification code.',
+                'user': CustomUserSerializer(user).data
             }, status=status.HTTP_201_CREATED)
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-class VerifyUserOTPView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        email = request.data.get('email')
-        otp_code = request.data.get('otp')
-        user_data = request.data.get('user_data')
-
-        # Find the pending registration
-        try:
-            pending = PendingRegistration.objects.get(email=email)
-        except PendingRegistration.DoesNotExist:
-            return Response({'error': 'No pending registration found for this email.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        otp_obj = PendingVerificationOTP.objects.filter(pending=pending, otp_code=otp_code, is_used=False).order_by('-created_at').first()
-        if not otp_obj or not otp_obj.is_valid():
-            return Response({'error': 'Invalid or expired OTP.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Create actual user using the stored hashed password
-        user = CustomUser.objects.create(
-            email=pending.email,
-            name=pending.name,
-            is_active=True,
-        )
-        user.password = pending.password_hashed
-        user.save()
-
-        otp_obj.is_used = True
-        otp_obj.save()
-
-        # cleanup pending data
-        PendingVerificationOTP.objects.filter(pending=pending).delete()
-        pending.delete()
-
-        refresh = RefreshToken.for_user(user)
-
-        return Response({
-            'message': 'Email verified. Registration successful.',
-            'user': CustomUserSerializer(user).data,
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            }
-        }, status=status.HTTP_201_CREATED)
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -140,8 +72,8 @@ class LoginView(APIView):
                 'message': 'Login successful',
                 'user': CustomUserSerializer(user).data,
                 'tokens': {
-                    'access': str(refresh.access_token),
                     'refresh': str(refresh),
+                    'access': str(refresh.access_token),
                 }
             }, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -159,50 +91,68 @@ class LogoutView(APIView):
         except Exception as e:
             return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
 
+class UserProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        serializer = CustomUserSerializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 class VerifyEmailView(APIView):
     permission_classes = [AllowAny]
     
     def post(self, request):
-        serializer = OtpVerificationSerializer(data=request.data)
+        serializer = EmailVerificationSerializer(data=request.data)
         if serializer.is_valid():
-            # This endpoint will verify pending registration OTP and create user
             email = serializer.validated_data['email']
             otp_code = serializer.validated_data['otp_code']
-
+            
             try:
-                pending = PendingRegistration.objects.get(email=email)
-            except PendingRegistration.DoesNotExist:
-                return Response({'error': 'No pending registration found for this email.'}, status=status.HTTP_400_BAD_REQUEST)
-
-            otp_obj = PendingVerificationOTP.objects.filter(pending=pending, otp_code=otp_code, is_used=False).order_by('-created_at').first()
-            if not otp_obj or not otp_obj.is_valid():
-                return Response({'error': 'Invalid or expired verification code.'}, status=status.HTTP_400_BAD_REQUEST)
-
-            user = CustomUser.objects.create(
-                email=pending.email,
-                name=pending.name,
-                is_active=True,
-            )
-            user.password = pending.password_hashed
-            user.save()
-
-            otp_obj.is_used = True
-            otp_obj.save()
-
-            PendingVerificationOTP.objects.filter(pending=pending).delete()
-            pending.delete()
-
-            refresh = RefreshToken.for_user(user)
-
-            return Response({
-                'message': 'Email verified successfully and account created.',
-                'user': CustomUserSerializer(user).data,
-                'tokens': {
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token),
-                }
-            }, status=status.HTTP_201_CREATED)
+                user = CustomUser.objects.get(email=email)
+                
+                if user.is_verified:
+                    return Response({
+                        'message': 'Email is already verified. You can login now.'
+                    }, status=status.HTTP_200_OK)
+                
+                verification_token = EmailVerificationOTP.objects.filter(
+                    user=user,
+                    otp_code=otp_code,
+                    is_used=False
+                ).order_by('-created_at').first()
+                
+                if not verification_token:
+                    return Response({
+                        'error': 'Invalid verification code.'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                if not verification_token.is_valid():
+                    return Response({
+                        'error': 'Verification code has expired. Please request a new one.'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                user.is_verified = True
+                user.is_active = True
+                user.save()
+                
+                verification_token.is_used = True
+                verification_token.save()
+                
+                refresh = RefreshToken.for_user(user)
+                
+                return Response({
+                    'message': 'Email verified successfully! You can now login.',
+                    'user': CustomUserSerializer(user).data,
+                    'tokens': {
+                        'refresh': str(refresh),
+                        'access': str(refresh.access_token),
+                    }
+                }, status=status.HTTP_200_OK)
+                
+            except CustomUser.DoesNotExist:
+                return Response({
+                    'error': 'No user found with this email address.'
+                }, status=status.HTTP_400_BAD_REQUEST)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -210,43 +160,36 @@ class ResendVerificationEmailView(APIView):
     permission_classes = [AllowAny]
     
     def post(self, request):
-        serializer = ResendOtpVerificationSerializer(data=request.data)
+        serializer = ResendVerificationEmailSerializer(data=request.data)
         if serializer.is_valid():
             email = serializer.validated_data['email']
-            # find pending registration
-            try:
-                pending = PendingRegistration.objects.get(email=email)
-            except PendingRegistration.DoesNotExist:
-                return Response({'error': 'No pending registration found for this email.'}, status=status.HTTP_400_BAD_REQUEST)
-
-            # mark old pending otps used and create new one
-            PendingVerificationOTP.objects.filter(pending=pending, is_used=False).update(is_used=True)
-            otp = PendingVerificationOTP.objects.create(pending=pending)
-
+            user = CustomUser.objects.get(email=email)
+            EmailVerificationOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+            verification_otp = EmailVerificationOTP.objects.create(user=user)
             email_subject = 'Verify Your Email - SellnService'
             email_message = f"""
-Hello {pending.name},
+                Hello {user.name},
 
-You requested a new email verification code.
+                You requested a new email verification code.
 
-Your verification code is:
+                Your verification code is:
 
-{otp.otp_code}
+                {verification_otp.otp_code}
 
-This code will expire in 15 minutes.
+                This code will expire in 15 minutes.
 
-If you didn't request this, please ignore this email.
+                If you didn't request this, please ignore this email.
 
-Best regards,
-SellnService Team
+                Best regards,
+                SellnService Team
             """
-
+            
             try:
                 send_mail(
                     email_subject,
                     email_message,
                     settings.DEFAULT_FROM_EMAIL,
-                    [pending.email],
+                    [user.email],
                     fail_silently=False,
                 )
             except Exception as e:
@@ -254,7 +197,7 @@ SellnService Team
                     'error': 'Failed to send verification email. Please try again later.',
                     'details': str(e)
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+            
             return Response({
                 'message': 'Verification code sent successfully. Please check your email.'
             }, status=status.HTTP_200_OK)

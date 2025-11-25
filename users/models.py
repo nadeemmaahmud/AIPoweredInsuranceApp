@@ -3,7 +3,6 @@ from django.db import models
 from django.utils import timezone
 import random
 import string
-import uuid
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, name, password=None, **extra_fields):
@@ -19,7 +18,6 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     name = models.CharField(max_length=100)
     email = models.EmailField(unique=True)
     is_active = models.BooleanField(default=False)
-    is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(auto_now_add=True)
 
     objects = CustomUserManager()
@@ -58,62 +56,36 @@ class UserVerificationOTP(models.Model):
         return f"OTP for {self.email} - {self.otp_code}"
 
 
-class PendingRegistration(models.Model):
-    """Store registration data until the user verifies their email.
-
-    We store a hashed password (never the raw password) and create the real
-    `CustomUser` only after OTP verification.
-    """
-    email = models.EmailField(unique=True)
-    name = models.CharField(max_length=150)
-    password_hashed = models.CharField(max_length=255)
+class EmailVerificationOTP(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='verification_tokens')
+    otp_code = models.CharField(max_length=4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = 'Pending Registration'
-        verbose_name_plural = 'Pending Registrations'
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"Pending registration for {self.email}"
-
-
-class PendingVerificationOTP(models.Model):
-    pending = models.ForeignKey(PendingRegistration, on_delete=models.CASCADE, related_name='otps')
-    otp_code = models.CharField(max_length=6, editable=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField(blank=True, null=True)
+    expires_at = models.DateTimeField()
     is_used = models.BooleanField(default=False)
-
+    
     class Meta:
-        verbose_name = 'Pending Verification OTP'
-        verbose_name_plural = 'Pending Verification OTPs'
+        verbose_name = 'Email Verification OTP'
+        verbose_name_plural = 'Email Verification OTPs'
         ordering = ['-created_at']
-
+    
     def save(self, *args, **kwargs):
         if not self.otp_code:
-            self.otp_code = ''.join(random.choices(string.digits, k=6))
+            self.otp_code = ''.join(random.choices(string.digits, k=4))
         if not self.expires_at:
-            self.expires_at = timezone.now() + timezone.timedelta(minutes=15)
+            self.expires_at = timezone.now() + timezone.timedelta(minutes=5)
         super().save(*args, **kwargs)
-
-    @property
-    def is_expired(self):
-        return timezone.now() > self.expires_at
-
+    
     def is_valid(self):
-        return not self.is_used and not self.is_expired
-
+        return not self.is_used and timezone.now() < self.expires_at
+    
     def __str__(self):
-        return f"Pending OTP for {self.pending.email} - {self.otp_code}"
-
+        return f"OTP for {self.user.email} - {self.otp_code}"
 
 class PasswordResetOTP(models.Model):
-    token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='password_reset_otps')
     otp_code = models.CharField(max_length=4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField(blank=True, null=True)
+    expires_at = models.DateTimeField()
     is_used = models.BooleanField(default=False)
     
     class Meta:
@@ -125,17 +97,11 @@ class PasswordResetOTP(models.Model):
         if not self.otp_code:
             self.otp_code = ''.join(random.choices(string.digits, k=4))
         if not self.expires_at:
-            self.expires_at = timezone.now() + timezone.timedelta(minutes=10)
+            self.expires_at = timezone.now() + timezone.timedelta(minutes=5)
         super().save(*args, **kwargs)
     
-    @property
-    def is_expired(self):
-        if not self.expires_at:
-            return False
-        return timezone.now() > self.expires_at
-    
     def is_valid(self):
-        return not self.is_used and not self.is_expired
+        return not self.is_used and timezone.now() < self.expires_at
     
     def __str__(self):
-        return f"Password Reset OTP for {self.user.email} - token={self.token} otp={self.otp_code}"
+        return f"Password Reset OTP for {self.user.email} - {self.otp_code}"

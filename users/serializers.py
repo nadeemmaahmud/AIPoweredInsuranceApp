@@ -1,20 +1,34 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
-from .models import CustomUser, UserVerificationOTP
+from .models import CustomUser
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password], style={'input_type': 'password'})
-    confirm_password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+    confirm_password = serializers.CharField(write_only=True, required=True, label="Confirm Password", style={'input_type': 'password'})
 
     class Meta:
         model = CustomUser
         fields = ['email', 'name', 'password', 'confirm_password']
+        extra_kwargs = {
+            'first_name': {'required': True},
+            'last_name': {'required': True},
+            'email': {'required': True},
+        }
 
     def validate(self, attrs):
         if attrs['password'] != attrs['confirm_password']:
             raise serializers.ValidationError({"password": "Password fields didn't match."})
-        return attrs    
+        return attrs
+
+    def create(self, validated_data):
+        validated_data.pop('confirm_password')
+        user = CustomUser.objects.create_user(
+            name=validated_data['name'],
+            email=validated_data['email'],
+            password=validated_data['password'],
+        )
+        return user
 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
@@ -38,17 +52,21 @@ class LoginSerializer(serializers.Serializer):
         attrs['user'] = user
         return attrs
 
+class CustomUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'name', 'email', 'is_active', 'is_verified', 'date_joined']
 
-class OtpVerificationSerializer(serializers.Serializer):
+class EmailVerificationSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
-    otp_code = serializers.CharField(required=True, max_length=4, min_length=4)
+    otp_code = serializers.CharField(required=True, max_length=6, min_length=6)
 
     def validate_otp_code(self, value):
         if not value.isdigit():
             raise serializers.ValidationError("OTP code must contain only digits.")
         return value
 
-class ResendOtpVerificationSerializer(serializers.Serializer):
+class ResendVerificationEmailSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
 
     def validate_email(self, value):
@@ -92,8 +110,3 @@ class ResetPasswordSerializer(serializers.Serializer):
         if attrs['new_password'] != attrs['new_password2']:
             raise serializers.ValidationError({"new_password": "Password fields didn't match."})
         return attrs
-
-class CustomUserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CustomUser
-        fields = ['id', 'email', 'name']
