@@ -71,8 +71,8 @@ class LoginView(APIView):
                 'message': 'Login successful',
                 'user': CustomUserSerializer(user).data,
                 'tokens': {
-                    'refresh': str(refresh),
                     'access': str(refresh.access_token),
+                    'refresh': str(refresh),
                 }
             }, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -123,10 +123,9 @@ class VerifyEmailView(APIView):
                 verification_otp.is_used = True
                 verification_otp.save()
                 
-                refresh = RefreshToken.for_user(user)
-                
                 return Response({
                     'message': 'Email verified successfully! You can now login.',
+                    'user': CustomUserSerializer(user).data,
                 }, status=status.HTTP_200_OK)
                 
             except CustomUser.DoesNotExist:

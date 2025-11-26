@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'channels',
     'generalchat',
     'premiumchat',
+    'case',
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
