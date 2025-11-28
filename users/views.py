@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
+from google.oauth2 import id_token
+from google.auth.transport import requests
 from django.conf import settings
 from .models import CustomUser, EmailVerificationOTP, PasswordResetOTP
 from .serializers import (
@@ -274,3 +276,43 @@ class ResetPasswordView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+class GoogleLoginView(APIView):
+    def post(self, request):
+        token = request.data.get('token')
+        
+        try:
+            idinfo = id_token.verify_oauth2_token(
+                token, 
+                requests.Request(), 
+                'YOUR_GOOGLE_CLIENT_ID'
+            )
+            
+            email = idinfo['email']
+            name = idinfo.get('name', '')
+            
+            user, created = CustomUser.objects.get_or_create(
+                email=email,
+                defaults={'name': name, 'is_active': True}
+            )
+            
+            if not user.is_active:
+                user.is_active = True
+                user.save()
+            
+            refresh = RefreshToken.for_user(user)
+            
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'user': {
+                    'email': user.email,
+                    'name': user.name
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except ValueError:
+            return Response(
+                {'error': 'Invalid token'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )

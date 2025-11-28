@@ -101,3 +101,9 @@ class ResetPasswordSerializer(serializers.Serializer):
         if attrs['new_password'] != attrs['confirm_password']:
             raise serializers.ValidationError({"new_password": "Password fields didn't match."})
         return attrs
+    
+'''class GoogleAuthSerializer(serializers.Serializer):
+    code = serializers.CharField(required=True)
+
+class GoogleTokenSerializer(serializers.Serializer):
+    token = serializers.CharField(required=True)'''
