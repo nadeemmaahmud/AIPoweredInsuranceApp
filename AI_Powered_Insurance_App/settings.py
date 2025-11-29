@@ -14,6 +14,8 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
+import firebase_admin
+from firebase_admin import credentials
 
 load_dotenv()
 
@@ -167,4 +169,10 @@ GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
 
 AUTH_USER_MODEL = 'users.CustomUser'
 
-#GOOGLE_CLIENT_ID = 'your-google-client-id'
+
+firebase_credentials_path = os.environ.get(
+    "FIREBASE_CREDENTIALS_PATH",
+    os.path.join(BASE_DIR, "clamea-cb2ae-firebase-adminsdk-fbsvc-2f17fb67c3.json")
+)
+cred = credentials.Certificate(firebase_credentials_path)
+firebase_admin.initialize_app(cred)

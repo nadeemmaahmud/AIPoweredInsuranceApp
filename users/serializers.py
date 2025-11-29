@@ -102,8 +102,13 @@ class ResetPasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError({"new_password": "Password fields didn't match."})
         return attrs
     
-'''class GoogleAuthSerializer(serializers.Serializer):
-    code = serializers.CharField(required=True)
+class SocialLoginRequestSerializer(serializers.Serializer):
+    id_token = serializers.CharField(
+        required=True,
+        help_text="ID token received from Google/Apple SDK"
+    )
 
-class GoogleTokenSerializer(serializers.Serializer):
-    token = serializers.CharField(required=True)'''
+class SocialLoginResponseSerializer(serializers.Serializer):
+    access = serializers.CharField(help_text="JWT access token")
+    refresh = serializers.CharField(help_text="JWT refresh token")
+    user = serializers.DictField(help_text="User information")

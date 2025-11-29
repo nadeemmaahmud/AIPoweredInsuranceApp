@@ -1,16 +1,20 @@
-from rest_framework import status, generics
+from rest_framework import status
+from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from google.auth.exceptions import GoogleAuthError
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
-from google.oauth2 import id_token
-from google.auth.transport import requests
 from django.conf import settings
 from .models import CustomUser, EmailVerificationOTP, PasswordResetOTP
+from .utils import ResponseMixin
 from .serializers import (
     RegisterSerializer, LoginSerializer, CustomUserSerializer, EmailVerificationSerializer,
-    ResendVerificationEmailSerializer,ForgotPasswordSerializer, ResetPasswordSerializer
+    ResendVerificationEmailSerializer,ForgotPasswordSerializer, ResetPasswordSerializer,
+    SocialLoginRequestSerializer, SocialLoginResponseSerializer,
 )
 
 class RegisterView(APIView):
@@ -31,7 +35,7 @@ class RegisterView(APIView):
 
                 {verification_otp.otp_code}
 
-                This code will expire in 15 minutes.
+                This code will expire in 5 minutes.
 
                 If you didn't create an account, please ignore this email.
 
@@ -157,7 +161,7 @@ class ResendVerificationEmailView(APIView):
 
                 {verification_otp.otp_code}
 
-                This code will expire in 15 minutes.
+                This code will expire in 5 minutes.
 
                 If you didn't request this, please ignore this email.
 
@@ -205,7 +209,7 @@ class ForgotPasswordView(APIView):
 
                 {reset_otp.otp_code}
 
-                This code will expire in 15 minutes.
+                This code will expire in 5 minutes.
 
                 If you didn't request this, please ignore this email and your password will remain unchanged.
 
@@ -277,42 +281,137 @@ class ResetPasswordView(APIView):
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-class GoogleLoginView(APIView):
+def generate_tokens_for_user(user):
+    refresh = RefreshToken.for_user(user)
+    return {
+        "access": str(refresh.access_token),
+        "refresh": str(refresh),
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name or "",
+        }
+    }
+ 
+ 
+class GoogleLoginAPIView(ResponseMixin, APIView):
+    permission_classes = [AllowAny]
+ 
+    @extend_schema(
+        request=SocialLoginRequestSerializer,
+        responses={
+            200: OpenApiResponse(
+                response=SocialLoginResponseSerializer,
+                description='Google authentication successful'
+            ),
+            400: OpenApiResponse(description='Invalid token or bad request')
+        },
+        examples=[
+            OpenApiExample(
+                "Google ID Token Request",
+                value={"id_token": "ya29.a0AWY7CknF..."},
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Successful Authentication Response",
+                value={
+                    "success": True,
+                    "statusCode": 200,
+                    "message": "Google authentication successful",
+                    "data": {
+                        "access": "eyJ0eXAiOiJKV1QiLCJhbGc...",
+                        "refresh": "eyJ0eXAiOiJKV1QiLCJhbGc...",
+                        "user": {
+                            "id": "123e4567-e89b-12d3-a456-426614174000",
+                            "email": "user@gmail.com",
+                            "name": "John Doe"
+                        }
+                    },
+                    "timestamp": "2025-10-19T10:30:00Z"
+                },
+                response_only=True,
+            ),
+        ],
+        description=(
+            "Authenticate user with Google ID token.\n\n"
+            "**How it works:**\n"
+            "1. Client app obtains ID token from Google Sign-In SDK\n"
+            "2. Client sends the ID token to this endpoint\n"
+            "3. Server verifies the token with Google\n"
+            "4. If valid, creates/retrieves user and returns JWT tokens\n\n"
+            "**Note:** If user doesn't exist, a new account is automatically created."
+        ),
+        tags=["Social Authentication"],
+    )
     def post(self, request):
-        token = request.data.get('token')
-        
+        serializer = SocialLoginRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return self.error_response(
+                message='Validation failed',
+                data={'errors': serializer.errors},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        token = serializer.validated_data['id_token']
         try:
             idinfo = id_token.verify_oauth2_token(
                 token, 
-                requests.Request(), 
-                'YOUR_GOOGLE_CLIENT_ID'
+                google_requests.Request()
             )
-            
-            email = idinfo['email']
-            name = idinfo.get('name', '')
-            
+
+            email = idinfo.get("email")
+            name = idinfo.get("name", "")
+            google_uid = idinfo.get("sub")
+            if not email:
+                return self.error_response(
+                    message='Google token did not return an email',
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
+            email_verified = idinfo.get("email_verified", False)
+            if not email_verified:
+                return self.error_response(
+                    message='Google email is not verified',
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
             user, created = CustomUser.objects.get_or_create(
-                email=email,
-                defaults={'name': name, 'is_active': True}
+                email=email.lower(),
+                defaults={
+                    'name': name,
+                    'is_active': True,
+                }
             )
-            
+
             if not user.is_active:
                 user.is_active = True
-                user.save()
-            
-            refresh = RefreshToken.for_user(user)
-            
-            return Response({
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-                'user': {
-                    'email': user.email,
-                    'name': user.name
-                }
-            }, status=status.HTTP_200_OK)
-            
-        except ValueError:
-            return Response(
-                {'error': 'Invalid token'}, 
-                status=status.HTTP_400_BAD_REQUEST
+                user.save(update_fields=['is_active'])
+
+            if not created and not user.name and name:
+                user.name = name
+                user.save(update_fields=['name'])
+
+            tokens_data = generate_tokens_for_user(user)
+            message = 'Account created and authenticated successfully' if created else 'Google authentication successful'
+            return self.success_response(
+                message=message,
+                data=tokens_data,
+                status_code=status.HTTP_200_OK
+            )
+        except GoogleAuthError as e:
+            return self.error_response(
+                message='Invalid Google token',
+                data={'error': str(e)},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        except ValueError as e:
+            return self.error_response(
+                message='Token verification failed',
+                data={'error': str(e)},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return self.error_response(
+                message='Authentication failed',
+                data={'error': str(e)},
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
