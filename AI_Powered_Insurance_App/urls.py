@@ -9,6 +9,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/users/', include('users.urls')),
     path('api/cases/', include('case.urls')),
+    path('api/notifications/', include('notification.urls')),
     path('api/generalchats/', include('generalchat.urls')),
     path('api/premiumchats/', include('premiumchat.urls')),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),

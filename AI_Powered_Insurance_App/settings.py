@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'generalchat',
     'premiumchat',
     'case',
+    'notification',
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
@@ -176,3 +177,13 @@ firebase_credentials_path = os.environ.get(
 )
 cred = credentials.Certificate(firebase_credentials_path)
 firebase_admin.initialize_app(cred)
+
+FCM_API_KEY = os.environ.get('FCM_API_KEY')
+
+CELERY_BROKER_URL = "redis://localhost:6379/0"  # Assuming Redis
+CELERY_BEAT_SCHEDULE = {
+    "send-monthly-notification": {
+        "task": "notifications.tasks.send_monthly_notification",
+        "schedule": 60 * 60 * 24 * 30,  # roughly every 30 days
+    },
+}
