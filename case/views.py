@@ -32,7 +32,7 @@ class CaseCreateView(APIView):
         if serializer.is_valid():
             case = serializer.save(user=request.user)
             serializer = CaseSerializer(case)
-            return Response({"case": serializer.data}, status=status.HTTP_201_CREATED)
+            return Response({"message": "Case created successfully","case": serializer.data}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class CaseUpdateView(APIView):
@@ -52,7 +52,7 @@ class CaseUpdateView(APIView):
         if serializer.is_valid():
             case = serializer.save()
             serializer = CaseSerializer(case)
-            return Response({"case": serializer.data}, status=status.HTTP_200_OK)
+            return Response({"message": "Case updated successfully","case": serializer.data}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class CaseDeleteView(APIView):
@@ -64,4 +64,4 @@ class CaseDeleteView(APIView):
         except Case.DoesNotExist:
             return Response({'detail': 'Case not found'}, status=status.HTTP_404_NOT_FOUND)
         case.delete()
-        return Response({'detail': 'Case deleted'}, status=status.HTTP_204_NO_CONTENT)
+        return Response({"message": "Case deleted successfully",'detail': 'Case deleted'}, status=status.HTTP_204_NO_CONTENT)
