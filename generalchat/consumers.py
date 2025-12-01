@@ -1,8 +1,10 @@
 import os
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from groq import Groq
 from channels.generic.websocket import AsyncWebsocketConsumer
 import json
+from . models import ChatRoom, Message
 
 def _get_groq_client():
     api_key = settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY")
@@ -116,23 +118,27 @@ def test_openai_api(promt, conversation_history=None):
 
 class ChatBotConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        await self.accept()
+        self.user = self.scope["user"]
+
+        room = await sync_to_async(ChatRoom.objects.filter(participants=self.user).first)()
+
+        if not room:
+            room = await sync_to_async(ChatRoom.objects.create)(
+                participants=self.user,
+                name=None
+            )
+
+        self.room = room
+        self.room_name = str(room.id)
 
         self.conversation_history = []
+        await self.accept()
 
         await self.send(text_data=json.dumps({
-            "message": "👋 Hello! I'm Tushar, your SellnService assistant!\n\n"
-                       "I can help you with:\n"
-                       "• Managing your vehicle fleet\n"
-                       "• Scheduling services and maintenance\n"
-                       "• Recording sales and transactions\n"
-                       "• Account and profile management\n"
-                       "• Understanding platform features\n\n"
-                       "Just ask me anything about SellnService!"
+            "message": f"👋 Welcome back! Your chat ID is Room #{self.room.id}."
         }))
 
     async def disconnect(self, close_code):
-
         self.conversation_history = []
 
     async def receive(self, text_data):

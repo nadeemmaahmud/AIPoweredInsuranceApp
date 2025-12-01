@@ -1,18 +1,14 @@
 from django.db import models
-from django.contrib.auth import get_user_model
 from users.models import CustomUser as User
 
 class ChatRoom(models.Model):
     name = models.CharField(max_length=255, unique=True, null=True, blank=True)
-    display_name = models.CharField(max_length=255, blank=True)
-    description = models.TextField(blank=True)
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_rooms')
     created_at = models.DateTimeField(auto_now_add=True)
-    is_private = models.BooleanField(default=False)
-    participants = models.ManyToManyField(User, blank=True, related_name='chat_rooms')
+    is_private = models.BooleanField(default=True)
+    participants = models.ForeignKey(User, blank=True, on_delete=models.CASCADE, null=True, related_name='chat_rooms')
 
     def __str__(self):
-        return self.display_name or self.name
+        return self.name
 
     @property
     def last_message(self):
@@ -20,11 +16,10 @@ class ChatRoom(models.Model):
 
     @property
     def participant_count(self):
-        return self.participants.count()
+        return 1 if self.participants else 0
 
 class Message(models.Model):
     user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
-    room_name = models.CharField(max_length=255)
     room = models.ForeignKey(ChatRoom, on_delete=models.CASCADE, null=True, blank=True, related_name='messages')
     content = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)

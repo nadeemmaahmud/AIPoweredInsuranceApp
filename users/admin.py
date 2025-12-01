@@ -3,7 +3,7 @@ from .models import CustomUser
 
 @admin.register(CustomUser)
 class CustomUserAdmin(admin.ModelAdmin):
-    list_display = ('email', 'name', 'is_active', 'is_staff', 'date_joined')
+    list_display = ('email', 'name', 'is_active', 'is_staff','date_joined')
     readonly_fields = ('date_joined',)
 
     fieldsets = (

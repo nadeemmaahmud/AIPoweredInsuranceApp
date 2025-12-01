@@ -102,6 +102,14 @@ class ResetPasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError({"new_password": "Password fields didn't match."})
         return attrs
     
+class ResendResetPasswordEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+
+    def validate_email(self, value):
+        if not CustomUser.objects.filter(email=value).exists():
+            raise serializers.ValidationError("No user found with this email address.")
+        return value
+    
 class SocialLoginRequestSerializer(serializers.Serializer):
     id_token = serializers.CharField(
         required=True,

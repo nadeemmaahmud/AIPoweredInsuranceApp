@@ -14,7 +14,7 @@ from .utils import ResponseMixin
 from .serializers import (
     RegisterSerializer, LoginSerializer, CustomUserSerializer, EmailVerificationSerializer,
     ResendVerificationEmailSerializer,ForgotPasswordSerializer, ResetPasswordSerializer,
-    SocialLoginRequestSerializer, SocialLoginResponseSerializer,
+    SocialLoginRequestSerializer, SocialLoginResponseSerializer, ResendResetPasswordEmailSerializer
 )
 
 class RegisterView(APIView):
@@ -278,6 +278,54 @@ class ResetPasswordView(APIView):
                 return Response({
                     'error': 'No user found with this email address.'
                 }, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+class ResendResetPasswordEmailView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        serializer = ResendResetPasswordEmailSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            user = CustomUser.objects.get(email=email)
+            PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+            reset_otp = PasswordResetOTP.objects.create(user=user)
+            email_subject = 'Password Reset Request - SellnService'
+            email_message = f"""
+                Hello {user.name},
+
+                You requested a new password reset code.
+
+                Your password reset code is:
+
+                {reset_otp.otp_code}
+
+                This code will expire in 5 minutes.
+
+                If you didn't request this, please ignore this email.
+
+                Best regards,
+                SellnService Team
+            """
+            
+            try:
+                send_mail(
+                    email_subject,
+                    email_message,
+                    settings.DEFAULT_FROM_EMAIL,
+                    [user.email],
+                    fail_silently=False,
+                )
+            except Exception as e:
+                return Response({
+                    'error': 'Failed to send password reset email. Please try again later.',
+                    'details': str(e)
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            return Response({
+                'message': 'Password reset code sent successfully. Please check your email.'
+            }, status=status.HTTP_200_OK)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
