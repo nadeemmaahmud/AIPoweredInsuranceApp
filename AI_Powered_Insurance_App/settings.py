@@ -16,6 +16,7 @@ DEBUG = os.environ.get('DEBUG')
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS').split(',')
 CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS').split(',')
 CSRF_ALLOWED_ORIGINS = os.environ.get('CSRF_ALLOWED_ORIGINS').split(',')
+CORS_HEADER_ALLOW_ALL_ORIGINS = True
 
 INSTALLED_APPS = [
     'daphne',
