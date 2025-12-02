@@ -156,13 +156,25 @@ class ChatBotConsumer(AsyncWebsocketConsumer):
             )
 
             if any(w in prompt.lower() for w in ["exit", "quit", "bye", "goodbye"]):
-                await self.send(json.dumps({"message": "👋 Tushar: Signing off! Have a great day!"}))
+                closing_msg = "👋 Tushar: Signing off! Have a great day!"
+
+                await sync_to_async(Message.objects.create)(
+                    user=None,
+                    room=self.room,
+                    content=closing_msg
+                )
+
+                self.conversation_history.append({"role": "user", "content": prompt})
+                self.conversation_history.append({"role": "assistant", "content": closing_msg})
+
+                await self.send(json.dumps({"message": closing_msg}))
                 return await self.close()
+
             if not is_on_topic(prompt):
-                return await self.send(json.dumps({
-                    "message": "I'm here to help you with SellnService features.\nAsk me anything about vehicles, service, sales or account!"
-                }))
-                
+                msg = "I'm here to help you with SellnService features.\nAsk me anything about vehicles, service, sales or account!"
+                await self.send(json.dumps({"message": msg}))
+                return
+
             answer = await get_ai_response(prompt, self.conversation_history)
 
             await sync_to_async(Message.objects.create)(

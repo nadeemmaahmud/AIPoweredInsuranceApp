@@ -8,15 +8,7 @@ class ChatRoom(models.Model):
     participants = models.ForeignKey(User, blank=True, on_delete=models.CASCADE, null=True, related_name='chat_rooms')
 
     def __str__(self):
-        return self.name or f'Room {self.id}'
-
-    @property
-    def last_message(self):
-        return self.messages.last()
-
-    @property
-    def participant_count(self):
-        return 1 if self.participants else 0
+        return f"{self.name[:40]}" or f"Room {self.id}"
 
 class Message(models.Model):
     user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
