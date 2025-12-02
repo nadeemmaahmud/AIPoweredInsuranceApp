@@ -143,70 +143,38 @@ class ChatBotConsumer(AsyncWebsocketConsumer):
 
     async def receive(self, text_data):
         try:
-
-            if not text_data or text_data.strip() == "":
-                await self.send(text_data=json.dumps({
-                    "error": "Empty message received"
-                }))
-                return
-
-
-            try:
-                data = json.loads(text_data)
-            except json.JSONDecodeError:
-                await self.send(text_data=json.dumps({
-                    "error": "Invalid JSON format. Please send {\"message\": \"your text\"}"
-                }))
-                return
-
+            data = json.loads(text_data)
             prompt = data.get("message", "").strip()
 
+            if prompt == "":
+                return await self.send(json.dumps({"error": "Message cannot be empty"}))
 
-            if not prompt:
-                await self.send(text_data=json.dumps({
-                    "error": "Message field is required and cannot be empty"
-                }))
-                return
+            await sync_to_async(Message.objects.create)(
+                user=self.user,
+                room=self.room,
+                content=prompt
+            )
 
-
-            if any(exit_word in prompt.lower() for exit_word in ["exit", "quit", "bye", "goodbye"]):
-                await self.send(text_data=json.dumps({
-                    "message": "'Tushar' the Bot: Okay, goodbye! Have a great day!"
-                }))
-                await self.close()
-                return
-
-
+            if any(w in prompt.lower() for w in ["exit", "quit", "bye", "goodbye"]):
+                await self.send(json.dumps({"message": "👋 Tushar: Signing off! Have a great day!"}))
+                return await self.close()
             if not is_on_topic(prompt):
-                await self.send(text_data=json.dumps({
-                    "message": "'Tushar' the Bot: I'm here to help you with SellnService platform! I can assist you with:\n\n"
-                               "🚗 Vehicle Management - Add, track, and manage your fleet\n"
-                               "🔧 Service Scheduling - Book and track maintenance\n"
-                               "💰 Sales Management - Record and manage vehicle sales\n"
-                               "👤 Account Help - Registration, login, password reset\n"
-                               "💬 Platform Features - Upload images, view history, chat support\n\n"
-                               "What would you like to know about?"
+                return await self.send(json.dumps({
+                    "message": "I'm here to help you with SellnService features.\nAsk me anything about vehicles, service, sales or account!"
                 }))
-                return
-
-
-            try:
-                answer = await get_ai_response(prompt, self.conversation_history)
                 
+            answer = await get_ai_response(prompt, self.conversation_history)
 
-                self.conversation_history.append({"role": "user", "content": prompt})
-                self.conversation_history.append({"role": "assistant", "content": answer})
-                
-                await self.send(text_data=json.dumps({
-                    "message": f"'Tushar' the Bot: {answer}"
-                }))
-            except Exception as e:
-                await self.send(text_data=json.dumps({
-                    "error": f"Failed to get AI response: {str(e)}"
-                }))
+            await sync_to_async(Message.objects.create)(
+                user=None,
+                room=self.room,
+                content=answer
+            )
+
+            self.conversation_history.append({"role": "user", "content": prompt})
+            self.conversation_history.append({"role": "assistant", "content": answer})
+
+            await self.send(json.dumps({"message": answer}))
 
         except Exception as e:
-
-            await self.send(text_data=json.dumps({
-                "error": f"An unexpected error occurred: {str(e)}"
-            }))
+            await self.send(json.dumps({"error": str(e)}))
