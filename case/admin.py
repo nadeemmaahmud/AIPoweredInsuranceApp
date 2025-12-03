@@ -1,3 +1,5 @@
 from django.contrib import admin
+from .models import Case, CaseFile
 
-# Register your models here.
+admin.site.register(Case)
+admin.site.register(CaseFile)
