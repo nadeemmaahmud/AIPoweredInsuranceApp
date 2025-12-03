@@ -7,8 +7,18 @@ class ChatRoom(models.Model):
     is_private = models.BooleanField(default=True)
     participants = models.ForeignKey(User, blank=True, on_delete=models.CASCADE, null=True, related_name='chat_rooms')
 
-    def __str__(self):
-        return f"{self.name[:40]}" or f"Room {self.id}"
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+
+        if self.room and not self.room.name:
+            generated_title = self.generate_room_title()
+            self.room.name = generated_title[:50]
+            self.room.save(update_fields=['name'])
+
+    def generate_room_title(self):
+        text = self.content.strip().split("?")[0]
+        text = text[:50]  
+        return text.title() 
 
 class Message(models.Model):
     user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)

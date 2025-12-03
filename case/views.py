@@ -13,17 +13,6 @@ class CaseListView(APIView):
         serializer = CaseSerializer(cases, many=True)
         return Response({"cases": serializer.data}, status=status.HTTP_200_OK)
 
-class CaseDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, pk):
-        try:
-            case = Case.objects.get(pk=pk, user=request.user)
-        except Case.DoesNotExist:
-            return Response({'detail': 'Case not found'}, status=status.HTTP_404_NOT_FOUND)
-        serializer = CaseSerializer(case)
-        return Response({"case": serializer.data}, status=status.HTTP_200_OK)
-
 class CaseCreateView(APIView):
     permission_classes = [IsAuthenticated]
 

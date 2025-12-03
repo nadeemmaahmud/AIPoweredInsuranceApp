@@ -25,11 +25,11 @@ class RegisterView(APIView):
         if serializer.is_valid():
             user = serializer.save()
             verification_otp = EmailVerificationOTP.objects.create(user=user)
-            email_subject = 'Verify Your Email - SellnService'
+            email_subject = 'Verify Your Email - Clamea'
             email_message = f"""
                 Hello {user.name},
 
-                Thank you for registering with SellnService!
+                Thank you for registering with Clamea!
 
                 Your email verification code is:
 
@@ -40,7 +40,7 @@ class RegisterView(APIView):
                 If you didn't create an account, please ignore this email.
 
                 Best regards,
-                SellnService Team
+                Clamea Team
             """
             
             try:
@@ -151,7 +151,7 @@ class ResendVerificationEmailView(APIView):
             user = CustomUser.objects.get(email=email)
             EmailVerificationOTP.objects.filter(user=user, is_used=False).update(is_used=True)
             verification_otp = EmailVerificationOTP.objects.create(user=user)
-            email_subject = 'Verify Your Email - SellnService'
+            email_subject = 'Verify Your Email - Clamea'
             email_message = f"""
                 Hello {user.name},
 
@@ -166,7 +166,7 @@ class ResendVerificationEmailView(APIView):
                 If you didn't request this, please ignore this email.
 
                 Best regards,
-                SellnService Team
+                Clamea Team
             """
             
             try:
@@ -199,7 +199,7 @@ class ForgotPasswordView(APIView):
             user = CustomUser.objects.get(email=email)
             PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
             reset_otp = PasswordResetOTP.objects.create(user=user)
-            email_subject = 'Password Reset Request - SellnService'
+            email_subject = 'Password Reset Request - Clamea'
             email_message = f"""
                 Hello {user.name},
 
@@ -214,7 +214,7 @@ class ForgotPasswordView(APIView):
                 If you didn't request this, please ignore this email and your password will remain unchanged.
 
                 Best regards,
-                SellnService Team
+                Clamea Team
             """
             
             try:
@@ -291,7 +291,7 @@ class ResendResetPasswordEmailView(APIView):
             user = CustomUser.objects.get(email=email)
             PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
             reset_otp = PasswordResetOTP.objects.create(user=user)
-            email_subject = 'Password Reset Request - SellnService'
+            email_subject = 'Password Reset Request - Clamea'
             email_message = f"""
                 Hello {user.name},
 
@@ -306,7 +306,7 @@ class ResendResetPasswordEmailView(APIView):
                 If you didn't request this, please ignore this email.
 
                 Best regards,
-                SellnService Team
+                Clamea Team
             """
             
             try:

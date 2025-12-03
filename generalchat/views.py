@@ -2,7 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .serializers import ChatRoomSerializer
-from .models import ChatRoom
+from .models import ChatRoom, Message
 from rest_framework.permissions import IsAuthenticated
 
 class ChatCreateView(APIView):
@@ -11,10 +11,12 @@ class ChatCreateView(APIView):
     def post(self, request):
         serializer = ChatRoomSerializer(data=request.data)
         if serializer.is_valid():
-            chat_room = serializer.save(commit=False)
-            chat_room.name = f"chat_room_{chat_room.messasges.count()+1}" 
-            serializer = ChatRoomSerializer(chat_room)
-            return Response({"message": "Chat room created successfully","chat_room": serializer.data}, status=status.HTTP_201_CREATED)
+            chat_room = serializer.save(participants=request.user)
+
+            return Response({
+                "message": "Chat room created",
+                "chat_room": ChatRoomSerializer(chat_room).data
+            }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 class ChatListView(APIView):
