@@ -6,7 +6,7 @@ from .views import (
 )
 
 urlpatterns = [
-    path('', CaseListView.as_view(), name='case-list'),
+    path('list/', CaseListView.as_view(), name='case-list'),
     path('create/', CaseCreateView.as_view(), name='case-create'),
     path('<int:pk>/update/', CaseUpdateView.as_view(), name='case-update'),
     path('<int:pk>/delete/', CaseDeleteView.as_view(), name='case-delete'),

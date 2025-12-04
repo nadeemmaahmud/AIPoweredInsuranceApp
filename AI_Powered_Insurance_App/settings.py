@@ -13,9 +13,9 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 
 DEBUG = os.environ.get('DEBUG')
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS').split(',')
-CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS').split(',')
-CSRF_ALLOWED_ORIGINS = os.environ.get('CSRF_ALLOWED_ORIGINS').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
+CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
+CSRF_ALLOWED_ORIGINS = os.environ.get('CSRF_ALLOWED_ORIGINS', '').split(',')
 CORS_HEADER_ALLOW_ALL_ORIGINS = True
 
 INSTALLED_APPS = [
@@ -148,3 +148,7 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 60 * 60 * 24 * 30,  # roughly every 30 days
     },
 }
+
+print("ALLOWED_HOSTS =", ALLOWED_HOSTS)
+print("CSRF_TRUSTED_ORIGINS =", CSRF_TRUSTED_ORIGINS)
+print("CSRF_ALLOWED_ORIGINS =", CSRF_ALLOWED_ORIGINS)
