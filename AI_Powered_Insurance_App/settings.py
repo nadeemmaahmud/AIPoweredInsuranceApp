@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'generalchat',
     'premiumchat',
     'case',
+    'payments',
     'notification',
     'rest_framework',
     'rest_framework_simplejwt',
