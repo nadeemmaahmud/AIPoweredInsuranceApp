@@ -11,7 +11,7 @@ class CaseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Case
-        fields = ['id', 'user', 'type_of_injury', 'date_of_incident', 'description', 'created_at', 'files']
+        fields = ['id', 'user', 'type_of_injury', 'medical_visit', 'date_of_incident', 'description', 'created_at', 'files']
         read_only_fields = ['user', 'id', 'created_at']
 
 class CaseCreateUpdateSerializer(serializers.ModelSerializer):
@@ -23,7 +23,7 @@ class CaseCreateUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Case
-        fields = ['id', 'user', 'type_of_injury', 'date_of_incident', 'description', 'files']
+        fields = ['id', 'user', 'type_of_injury', 'medical_visit', 'date_of_incident', 'description', 'files']
         read_only_fields = ['user', 'id', 'created_at']
 
     def create(self, validated_data):

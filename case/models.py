@@ -4,6 +4,7 @@ from users.models import CustomUser
 class Case(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     type_of_injury = models.CharField(max_length=255)
+    medical_visit = models.CharField(max_length=3, choices=[('yes', 'Yes'), ('no', 'No')])
     date_of_incident = models.DateField()
     description = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

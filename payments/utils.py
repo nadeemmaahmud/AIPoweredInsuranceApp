@@ -27,7 +27,7 @@ def verify_android_purchase(purchase_token, product_id):
     except Exception:
         return {"valid": False}
     
-import requests
+'''import requests
 import jwt
 import time
 
@@ -66,3 +66,4 @@ def verify_ios_purchase(receipt, product_id):
 
     return {"valid": True, "expiry": expiry}
 
+'''
