@@ -1,28 +1,91 @@
-from rest_framework.views import APIView
+import os
+import requests
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework import status
-from .serializers import ChatRoomSerializer
 from .models import ChatRoom, Message
-from rest_framework.permissions import IsAuthenticated
+from .serializers import ChatRoomSerializer, MessageSerializer
+from django.conf import settings
 
-class ChatCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+MODEL_NAME = "llama-3.1-8b-instant"
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_API_KEY = settings.GROQ_API_KEY
 
-    def post(self, request):
-        serializer = ChatRoomSerializer(data=request.data)
-        if serializer.is_valid():
-            chat_room = serializer.save(participants=request.user)
+HEADERS = {
+    "Authorization": f"Bearer {GROQ_API_KEY}",
+    "Content-Type": "application/json",
+}
 
-            return Response({
-                "message": "Chat room created",
-                "chat_room": ChatRoomSerializer(chat_room).data
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-class ChatListView(APIView):
-    permission_classes = [IsAuthenticated]
+class ChatRoomViewSet(viewsets.ModelViewSet):
+    serializer_class = ChatRoomSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
-    def get(self, request):
-        chat_rooms = ChatRoom.objects.all()
-        serializer = ChatRoomSerializer(chat_rooms, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+    def get_queryset(self):
+        return ChatRoom.objects.filter(owner=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def send_message(self, request, pk=None):
+        chatroom = self.get_object()
+        user_text = request.data.get("message", "").strip()
+
+        if not user_text:
+            return Response({"error": "Message text is required"}, status=400)
+
+        user_msg = Message.objects.create(
+            room=chatroom,
+            sender="user",
+            content=user_text
+        )
+
+        payload = {
+            "model": MODEL_NAME,
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": user_text}
+            ]
+        }
+
+        try:
+            resp = requests.post(GROQ_API_URL, headers=HEADERS, json=payload)
+        except Exception as e:
+            return Response(
+                {"error": "Failed to connect to Groq API", "details": str(e)},
+                status=500
+            )
+
+        if resp.status_code != 200:
+            return Response(
+                {
+                    "error": "Groq API returned an error",
+                    "status": resp.status_code,
+                    "details": resp.text
+                },
+                status=resp.status_code
+            )
+
+        data = resp.json()
+
+        try:
+            ai_text = data["choices"][0]["message"]["content"]
+        except Exception:
+            return Response(
+                {"error": "Invalid AI response format", "data": data},
+                status=500
+            )
+
+        ai_msg = Message.objects.create(
+            room=chatroom,
+            sender="ai",
+            content=ai_text
+        )
+
+        return Response(
+            {
+                "user_message": MessageSerializer(user_msg).data,
+                "ai_message": MessageSerializer(ai_msg).data
+            },
+            status=200
+        )

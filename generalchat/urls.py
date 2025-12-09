@@ -1,7 +1,10 @@
-from django.urls import path
-from .views import ChatCreateView, ChatListView
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import ChatRoomViewSet
+
+router = DefaultRouter()
+router.register(r'chatrooms', ChatRoomViewSet, basename='chatroom')
 
 urlpatterns = [
-    path('', ChatListView.as_view(), name='chat_rooms'),
-    path('create-chat-room/', ChatCreateView.as_view(), name='create_chat_room'),
+    path('', include(router.urls)),
 ]
