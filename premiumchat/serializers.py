@@ -1,14 +1,17 @@
 from rest_framework import serializers
-from generalchat.models import ChatRoom, Message
-
-class ChatRoomSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ChatRoom
-        fields = ['id', 'name', 'created_at']
-        read_only_fields = ['created_at', 'id']
+from .models import PremiumMessage
+from case.models import Case
 
 class MessageSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Message
-        fields = ['id', 'room', 'user', 'content', 'timestamp']
-        read_only_fields = ['timestamp', 'id', 'user', 'room']
+        model = PremiumMessage
+        fields = ['id', 'room', 'sender', 'content', 'timestamp']
+        read_only_fields = ['timestamp', 'id', 'sender', 'room']
+
+class CaseSerializer(serializers.ModelSerializer):
+    premium_messages = MessageSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Case
+        fields = ['id', 'type_of_injury', 'description', 'premium_messages']
+        read_only_fields = ['id']

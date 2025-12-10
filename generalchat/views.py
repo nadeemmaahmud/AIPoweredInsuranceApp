@@ -84,6 +84,7 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
 
         return Response(
             {
+                "room":ChatRoomSerializer(chatroom).data,
                 "user_message": MessageSerializer(user_msg).data,
                 "ai_message": MessageSerializer(ai_msg).data
             },

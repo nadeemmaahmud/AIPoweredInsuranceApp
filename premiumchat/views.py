@@ -1,89 +1,92 @@
-from rest_framework.views import APIView
+import os
+import requests
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from generalchat.models import ChatRoom, Message
-from .serializers import ChatRoomSerializer, MessageSerializer
+from .models import PremiumMessage
+from case.models import Case
+from .serializers import CaseSerializer, MessageSerializer
+from django.conf import settings
 
-class ChatRoomCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+MODEL_NAME = "llama-3.1-8b-instant"
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_API_KEY = settings.GROQ_API_KEY
 
-    def post(self, request):
-        serializer = ChatRoomSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(user=request.user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+HEADERS = {
+    "Authorization": f"Bearer {GROQ_API_KEY}",
+    "Content-Type": "application/json",
+}
 
-class ChatRoomListView(APIView):
-    permission_classes = [IsAuthenticated]
+class ChatRoomViewSet(viewsets.ModelViewSet):
+    serializer_class = CaseSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
-    def get(self, request):
-        chat_rooms = ChatRoom.objects.filter(user=request.user)
-        serializer = ChatRoomSerializer(chat_rooms, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    
-class ChatRoomUpdateView(APIView):
-    permission_classes = [IsAuthenticated]
+    def get_queryset(self):
+        return Case.objects.filter(user=self.request.user)
 
-    def post(self, request, room_id):
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def send_message(self, request, pk=None):
+        chatroom = self.get_object()
+        user_text = request.data.get("message", "").strip()
+
+        if not user_text:
+            return Response({"error": "Message text is required"}, status=400)
+
+        user_msg = PremiumMessage.objects.create(
+            room=chatroom,
+            sender="user",
+            content=user_text
+        )
+
+        payload = {
+            "model": MODEL_NAME,
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": user_text}
+            ]
+        }
+
         try:
-            chat_room = ChatRoom.objects.get(id=room_id, user=request.user)
-        except ChatRoom.DoesNotExist:
-            return Response({"error": "Chat room not found."}, status=status.HTTP_404_NOT_FOUND)
+            resp = requests.post(GROQ_API_URL, headers=HEADERS, json=payload)
+        except Exception as e:
+            return Response(
+                {"error": "Failed to connect to Groq API", "details": str(e)},
+                status=500
+            )
 
-        serializer = MessageSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(user=request.user, room=chat_room)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-class ChatRoomDeleteView(APIView):
-    permission_classes = [IsAuthenticated]
+        if resp.status_code != 200:
+            return Response(
+                {
+                    "error": "Groq API returned an error",
+                    "status": resp.status_code,
+                    "details": resp.text
+                },
+                status=resp.status_code
+            )
 
-    def delete(self, request, room_id):
+        data = resp.json()
+
         try:
-            chat_room = ChatRoom.objects.get(id=room_id, user=request.user)
-            chat_room.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except ChatRoom.DoesNotExist:
-            return Response({"error": "Chat room not found."}, status=status.HTTP_404_NOT_FOUND)
-        
-class MessageCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+            ai_text = data["choices"][0]["message"]["content"]
+        except Exception:
+            return Response(
+                {"error": "Invalid AI response format", "data": data},
+                status=500
+            )
 
-    def post(self, request, room_id):
-        try:
-            chat_room = ChatRoom.objects.get(id=room_id, user=request.user)
-        except ChatRoom.DoesNotExist:
-            return Response({"error": "Chat room not found."}, status=status.HTTP_404_NOT_FOUND)
+        ai_msg = PremiumMessage.objects.create(
+            room=chatroom,
+            sender="ai",
+            content=ai_text
+        )
 
-        serializer = MessageSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(user=request.user, room=chat_room)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-class MessageListView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, room_id):
-        try:
-            chat_room = ChatRoom.objects.get(id=room_id, user=request.user)
-        except ChatRoom.DoesNotExist:
-            return Response({"error": "Chat room not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        messages = Message.objects.filter(room=chat_room)
-        serializer = MessageSerializer(messages, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    
-class MessageDeleteView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def delete(self, request, message_id):
-        try:
-            message = Message.objects.get(id=message_id, user=request.user)
-            message.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except Message.DoesNotExist:
-            return Response({"error": "Message not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {
+                "user_message": MessageSerializer(user_msg).data,
+                "ai_message": MessageSerializer(ai_msg).data
+            },
+            status=200
+        )
